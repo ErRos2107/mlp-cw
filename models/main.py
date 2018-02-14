@@ -2,7 +2,7 @@ from numpy import asarray, zeros
 from sklearn.preprocessing import LabelEncoder
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
-from keras.layers import Flatten, Embedding, Dense, Dropout, Conv1D, Conv2D
+from keras.layers import Flatten, Embedding, Dense, Dropout, Conv1D, Conv2D, GlobalMaxPooling1D, GlobalMaxPooling2D
 from keras.utils import to_categorical
 from keras.models import Sequential
 from file_reader import FileReader
@@ -63,7 +63,7 @@ embeddings_index = dict()
 embedding_file = open('./data/glove.6B.100d.txt')
 for line in embedding_file:
     values = line.split()
-    embeddings_index[values] = asarray(values[1:], dtype='float32')
+    embeddings_index[values[0]] = asarray(values[1:], dtype='float32')
 embedding_file.close()
 print("Loaded " + str(len(embeddings_index)) + " word vectors.")
 
@@ -84,8 +84,12 @@ model.add(Embedding(vocabulary_size,
                     weights=[embedding_matrix],
                     input_length=max_length,
                     trainable=False))
-model.add(Flatten())
-
+# Add Flatten for non convolutional networks
+# model.add(Flatten())
+model.add(Conv1D(100, 2))
+model.add(Dense(50, activation='relu'))
+model.add(GlobalMaxPooling1D())
+model.add(Dropout(0.5))
 model.add(Dense(14, activation='softmax'))
 
 print("Compiling the model with the optimizer and loss function")
