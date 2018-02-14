@@ -11,7 +11,7 @@ docs = ['Well done!',
         'Good work',
         'Weak',
         'Poor effort!',
-        'not good'2]
+        'not good']
 # define class labels
 labels = array([1, 1, 0, 0, 0])
 # integer encode the documents
