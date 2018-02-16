@@ -1,5 +1,6 @@
 from os import chdir
 
+
 class FileReader:
     def __init__(self):
         chdir("..")

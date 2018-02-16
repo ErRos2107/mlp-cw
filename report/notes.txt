@@ -1,0 +1,12 @@
+# import utils.kerasmodel_io as kerasio
+# maybe check this out
+
+https://machinelearningmastery.com/use-word-embedding-layers-deep-learning-keras/
+
+https://github.com/keras-team/keras/blob/master/examples/reuters_mlp.py
+
+https://gist.github.com/Thimira/354b90d59faf8b0d758f74eae3a511e2
+
+https://github.com/benbusse/keras-classification-examples/blob/master/keras-multi-class-classification-reuters.ipynb
+
+https://github.com/keras-team/keras/tree/master/examples

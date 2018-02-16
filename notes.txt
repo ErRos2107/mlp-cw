@@ -1,6 +1,0 @@
-# import utils.kerasmodel_io as kerasio
-# maybe check this out
-
-https://machinelearningmastery.com/use-word-embedding-layers-deep-learning-keras/
-
-https://github.com/keras-team/keras/blob/master/examples/reuters_mlp.py
