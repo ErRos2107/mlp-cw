@@ -30,4 +30,4 @@ export TMP=/disk/scratch/${STUDENT_ID}/
 
 source /home/${STUDENT_ID}/miniconda3/bin/activate mlp
 
-python twitter_starter.py --experiment_prefix 3 --batch_size 256 --epochs 50 --pt_embedding True --dropout_rate_value 0.0 --experiment_prefix TwitterStd --tensorboard_use True --seed 16122017
+srun -p interactive  --gres=gpu:1 --pty python twitter_starter.py --batch_size 256 --epochs 50 --pt_embedding True --dropout_rate 0.0 --experiment_prefix TwitterStd3 --tensorboard_use True --seed 16122017
