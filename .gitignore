@@ -2,3 +2,5 @@ data/glove*
 .idea/
 *.idea
 *.idea/
+embeddings.bin
+Google*
