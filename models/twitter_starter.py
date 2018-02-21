@@ -6,7 +6,6 @@ from data_providers import TwitterDataProvider
 from network_builder import ClassifierNetworkGraph
 from utils.parser_utils import ParserClass
 import tensorflow.contrib.learn as tflearn
-from tflearn.data_utils import pad_sequences
 from utils.storage import build_experiment_folder, save_statistics
 from gensim.models.keyedvectors import KeyedVectors 
 
