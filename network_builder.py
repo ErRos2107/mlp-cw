@@ -2,12 +2,14 @@ import tensorflow as tf
 
 from network_architectures import VGGClassifier
 from network_architectures import TextClassifier
+from network_architectures import RNNClassifier
 
 class ClassifierNetworkGraph:
-    def __init__(self, input_x, target_placeholder, dropout_rate, embeddings, vocab_size, max_sent_length,
+    def __init__(self, input_x, target_placeholder, dropout_rate, embeddings, vocab_size, max_sent_length, cell,
+                 hidden_unit, typec, num_units,
                  embedding_dim=300, num_filters=100, filter_sizes=[3,4,5],
-                 batch_size=100, num_channels=1, n_classes=14, is_training=True,
-                 tensorboard_use=False, l2_reg_lambda=0.0):
+                 batch_size=100, num_channels=1, n_classes=14, l2_norm=3, activation='relu', is_training=True,
+                 tensorboard_use=False, l2_reg_lambda=0.0, use_rnn=True):
 
         """
         Initializes a Classifier Network Graph that can build models, train, compute losses and save summary statistics and images
@@ -24,11 +26,15 @@ class ClassifierNetworkGraph:
         :param use_batch_normalization: Whether to use batch normalization between layers
         :param strided_dim_reduction: Whether to use strided dim reduction instead of max pooling
         """
-        self.batch_size = batch_size
-            
-        self.c = TextClassifier(self.batch_size, filter_sizes=filter_sizes, name="classifier_neural_network", embeddings=embeddings, max_sent_length=max_sent_length,
+        self.batch_size = batch_size       
+        if typec=='cnn':
+            self.c = TextClassifier(self.batch_size, filter_sizes=filter_sizes, name="classifier_neural_network", embeddings=embeddings, max_sent_length=max_sent_length,
                                vocab_size=vocab_size, num_channels=num_channels, embedding_dim=embedding_dim, num_filters=num_filters,
-                               num_classes=n_classes)
+                               num_classes=n_classes, l2_norm=l2_norm, activation=activation, num_units=num_units)
+        elif typec=='rnn':
+            self.c=RNNClassifier(self.batch_size, name='classifier_rnn', embeddings=embeddings, max_sent_length=max_sent_length,
+                                 vocab_size=vocab_size, embedding_dim=embedding_dim, num_classes=n_classes, cell=cell,
+                                 num_units=num_units, hidden_unit=hidden_unit)
 
         self.input_x = input_x
         self.dropout_rate = dropout_rate
@@ -50,12 +56,12 @@ class ClassifierNetworkGraph:
             text_inputs = self.input_x  # conditionally apply augmentaions
             true_outputs = self.targets
             # produce predictions and get layer features to save for visual inspection
-            preds, layer_features, l2_loss = self.c(text_input=text_inputs, training=self.training_phase,
+            preds, layer_features = self.c(text_input=text_inputs, training=self.training_phase,
                                            dropout_rate=self.dropout_rate)
             # compute loss and accuracy
             correct_prediction = tf.equal(tf.argmax(preds, 1), tf.cast(true_outputs, tf.int64))
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            crossentropy_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=preds, labels=true_outputs)) + l2_loss*self.l2_reg_lambda
+            crossentropy_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=preds, labels=true_outputs))
 
             # add loss and accuracy to collections
             tf.add_to_collection('crossentropy_losses', crossentropy_loss)
@@ -63,7 +69,7 @@ class ClassifierNetworkGraph:
 
             # save summaries for the losses, accuracy and image summaries for input images, augmented images
             # and the layer features
-            self.save_features(name="VGG_features", features=layer_features)
+            #self.save_features(name="VGG_features", features=layer_features)
             #tf.summary.image('text', [tf.concat(tf.unstack(self.input_x, axis=0), axis=0)])
             #tf.summary.image('augmented_image', [tf.concat(tf.unstack(image_inputs, axis=0), axis=0)])
             tf.summary.scalar('crossentropy_losses', crossentropy_loss)

@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.contrib.layers import batch_norm
+from tensorflow.contrib import rnn
 from tensorflow.python.ops.nn_ops import leaky_relu
 
 from utils.network_summary import count_parameters
@@ -89,8 +90,8 @@ class VGGClassifier:
 
 
 class TextClassifier:
-    def __init__(self, batch_size, filter_sizes, name, num_classes, embeddings, max_sent_length, vocab_size, num_channels=1,
-                 embedding_dim=300, num_filters=100):
+    def __init__(self, batch_size, filter_sizes, name, num_classes, embeddings, max_sent_length, vocab_size,num_units, num_channels=1,
+                 embedding_dim=300, num_filters=100, l2_norm=3, activation='relu'):
 
         """
         Initializes a VGG Classifier architecture
@@ -115,6 +116,9 @@ class TextClassifier:
         self.num_filters = num_filters
         self.max_sent_length = max_sent_length
         self.vocab_size = vocab_size
+        self.l2_norm = l2_norm
+        self.activation=activation
+        self.num_units = num_units
             
     def __call__(self, text_input, training=False, dropout_rate=0.0):
         """
@@ -132,13 +136,12 @@ class TextClassifier:
                      with tf.device('/cpu:0'), tf.name_scope("embedding"):
                         W = tf.Variable(
                             tf.random_uniform([self.vocab_size, self.embedding_dim], -1.0, 1.0),
-                            name="W")
-                        embedded_chars = tf.nn.embedding_lookup(W, text_input)
-                        inputs = embedded_chars_expanded = tf.expand_dims(embedded_chars, -1)
+                            name="W")             
                 else:
-                    inputs = tf.nn.embedding_lookup(self.embeddings,text_input)
-                    inputs=tf.expand_dims(inputs,-1)
-                
+                    W = self.embeddings
+
+                embedded_chars = tf.nn.embedding_lookup(W, text_input)
+                inputs = embedded_chars_expanded = tf.expand_dims(embedded_chars, -1)
                 pooled_outputs = []
                 for i, filter_size in enumerate(self.filter_sizes):
                     with tf.name_scope("conv-maxpool-%s" % filter_size):
@@ -153,7 +156,12 @@ class TextClassifier:
                             padding="VALID",
                             name="conv")
                         # Apply nonlinearity
-                        h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+                        if self.activation=='relu':
+                            h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+                        elif self.activation=='sigmoid':
+                            h = tf.sigmoid(tf.nn.bias_add(conv, b), name="sigmoid")
+                        elif self.activation=='tanh':
+                            h = tf.tanh(tf.nn.bias_add(conv, b), name="tanh")
                         layer_features.append(h)
                         # Maxpooling over the outputs
                         pooled = tf.nn.max_pool(
@@ -169,20 +177,19 @@ class TextClassifier:
                 h_pool = tf.concat(pooled_outputs, 3)
                 h_pool_flat = tf.reshape(h_pool, [-1, num_filters_total])
 
+                if self.l2_norm != 0:
+                    h_pool_flat = self.l2_norm * tf.divide(h_pool_flat, tf.norm(h_pool_flat, ord='euclidean'))
                 # Add dropout
                 with tf.name_scope("dropout"):
                     h_drop = tf.layers.dropout(h_pool_flat, rate=dropout_rate, training=training)
 
-            l2_loss = tf.constant(0.0)
-            # Final (unnormalized) scores and predictions
-            W = tf.get_variable(
-                "W",
-                shape=[num_filters_total, self.num_classes],
-                initializer=tf.contrib.layers.xavier_initializer())
-            b = tf.Variable(tf.constant(0.1, shape=[self.num_classes]), name="b")
-            l2_loss += tf.nn.l2_loss(W)
-            l2_loss += tf.nn.l2_loss(b)
-            scores = tf.nn.xw_plus_b(h_drop, W, b, name="scores")
+            c_conv_encoder = h_drop
+            c_conv_encoder = tf.contrib.layers.flatten(c_conv_encoder)
+
+            dense = tf.layers.dense(inputs=c_conv_encoder, units=self.num_units, activation=tf.nn.relu)
+
+            # Logits Layer
+            scores = tf.layers.dense(inputs=dense, units=self.num_classes)
 
         
         #self.reuse = True
@@ -192,5 +199,87 @@ class TextClassifier:
             self.build_completed = True
             count_parameters(self.variables, "VGGNet")
 
-        return scores, layer_features, l2_loss
+        return scores, layer_features
 
+
+
+class RNNClassifier:
+    def __init__(self, batch_size, name, num_classes, embeddings, max_sent_length, vocab_size, cell, num_units,hidden_unit=100,
+                 embedding_dim=300):
+
+        """
+        Initializes a VGG Classifier architecture
+        :param batch_size: The size of the data batch
+        :param filter_sizes: A list containing the filters sizes for the convolutional layer
+        :param name: Name of the network
+        :param num_classes: Number of classes we will need to classify
+        :param num_channels: Number of channels of our image data.
+        :param embeddings: the pretrained embeddings
+        :param embed_size: the size of each embeddings
+        :param num_filters: number of filter per size
+        """
+        self.reuse = False
+        self.batch_size = batch_size
+        self.name = name
+        self.num_classes = num_classes
+        self.build_completed = False
+        self.embeddings = embeddings
+        self.embedding_dim = embedding_dim
+        self.max_sent_length = max_sent_length
+        self.vocab_size = vocab_size
+        self.hidden_unit = hidden_unit
+        self.cell = cell
+        self.num_units= num_units
+
+    def __call__(self, text_input, training=False, dropout_rate=0.0):
+
+        with tf.variable_scope(self.name, reuse=self.reuse):
+            layer_features = []
+            with tf.variable_scope('VGGNet'):
+                if self.embeddings==None:
+                     with tf.name_scope("embedding"):
+                        W = tf.Variable(
+                            tf.random_uniform([self.vocab_size, self.embedding_dim], -1.0, 1.0),
+                            name="W")             
+                else:
+                    W = self.embeddings
+
+                embedded_chars = tf.nn.embedding_lookup(W, text_input)
+                if self.cell=='bidlstm':
+                    lstm_fw_cell=rnn.BasicLSTMCell(self.hidden_unit) #forward direction cell
+                    lstm_bw_cell=rnn.BasicLSTMCell(self.hidden_unit) #backward direction cell
+                    if dropout_rate is not None:
+                        lstm_fw_cell=rnn.DropoutWrapper(lstm_fw_cell,output_keep_prob=1-dropout_rate)
+                        lstm_bw_cell=rnn.DropoutWrapper(lstm_bw_cell,output_keep_prob=1-dropout_rate)
+                    outputs,_=tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell,lstm_bw_cell,embedded_chars,dtype=tf.float32) 
+                    output_rnn=tf.concat(outputs,axis=2) #[batch_size,sequence_length,hidden_size*2]
+                    output_rnn_last=tf.reduce_mean(output_rnn,axis=1) #[batch_size,hidden_size*2] #output_rnn_last=output_rnn[:,-1,:] ##[batch_size,hidden_size*2] #TODO
+                elif self.cell=='lstm':
+                    lstm_cell=rnn.BasicLSTMCell(self.hidden_unit)
+                    if dropout_rate is not None:
+                        lstm_cell=rnn.DropoutWrapper(lstm_cell,output_keep_prob=1-dropout_rate)
+                    outputs,_ = tf.nn.dynamic_rnn(lstm_cell, embedded_chars, dtype=tf.float32)
+                    output_rnn=tf.concat(outputs,axis=2)
+                    output_rnn_last=tf.reduce_mean(output_rnn,axis=1)
+                elif self.cell=='gru':
+                    gru_cell=rnn.GRUCell(self.hidden_unit)
+                    if dropout_rate is not None:
+                        gru_cell=rnn.DropoutWrapper(gru_cell,output_keep_prob=1-dropout_rate)
+                    outputs,_ = tf.nn.dynamic_rnn(gru_cell, embedded_chars, dtype=tf.float32)
+                    output_rnn=tf.concat(outputs,axis=2)
+                    output_rnn_last=tf.reduce_mean(output_rnn,axis=1)
+
+            c_conv_encoder = output_rnn_last
+            dense = tf.layers.dense(inputs=c_conv_encoder, units=self.num_units, activation=tf.nn.relu)
+
+            # Logits Layer
+            scores = tf.layers.dense(inputs=dense, units=self.num_classes, activation=tf.sigmoid)
+        
+        #self.reuse = True
+        self.variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
+
+        if not self.build_completed:
+            self.build_completed = True
+            count_parameters(self.variables, "VGGNet")
+
+        return scores, layer_features

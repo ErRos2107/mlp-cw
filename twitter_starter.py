@@ -2,10 +2,12 @@ import argparse
 import numpy as np
 import tensorflow as tf
 import tqdm
+import random
 from data_providers import TwitterDataProvider
 from network_builder import ClassifierNetworkGraph
 from utils.parser_utils import ParserClass
 import tensorflow.contrib.learn as tflearn
+from tflearn.data_utils import pad_sequences
 from utils.storage import build_experiment_folder, save_statistics
 from gensim.models.keyedvectors import KeyedVectors 
 
@@ -25,7 +27,9 @@ parser = argparse.ArgumentParser(description='Welcome to CNN experiments script'
 parser_extractor = ParserClass(parser=parser)  # creates a parser class to process the parsed input
 
 batch_size, seed, epochs, logs_path, continue_from_epoch, tensorboard_enable, embedding_dim, \
-filter_sizes, num_filters, experiment_prefix, dropout_rate_value, pt_embeddings = parser_extractor.get_argument_variables()
+filter_sizes, num_filters, experiment_prefix, dropout_rate_value, pt_embeddings, static_embeddings, \
+l2_norm, activation, typec, cell, hidden_unit, num_units = parser_extractor.get_argument_variables()
+
 # returns a list of objects that contain
 # our parsed input
 
@@ -83,8 +87,14 @@ if pt_embeddings:
             not_existent.append(word)
             word_embedding_2dlist[i] = np.random.uniform(-bound, bound, embedding_size);
             count_not_exist = count_not_exist + 1  # init a random value for the word.
+    print ('# words not found {0:d}'.format(count_not_exist))
+    print ('Some of them are:')
+    print (random.sample(not_existent, 10))
     word_embedding_final = np.array(word_embedding_2dlist)  # covert to 2d array.
-    word_embedding = tf.constant(word_embedding_final, dtype=tf.float32)  # convert to tensor
+    if static_embeddings:
+        word_embedding = tf.constant(word_embedding_final, dtype=tf.float32, name='W')  # convert to tensor
+    else:
+        word_embedding = tf.Variable(word_embedding_final, dtype=tf.float32, name='W')
     print ('done embedding')
 else:
     word_embedding=None
@@ -107,7 +117,10 @@ classifier_network = ClassifierNetworkGraph(input_x=data_inputs, target_placehol
                                             num_filters=num_filters, filter_sizes=filter_sizes,
                                             batch_size=batch_size, l2_reg_lambda=0.001,
                                             num_channels=1, n_classes=train_data.num_classes,
-                                            is_training=training_phase)  # initialize our computational graph
+                                            l2_norm=l2_norm,
+                                            activation=activation,
+                                            typec=typec, cell=cell, hidden_unit=hidden_unit,
+                                            num_units=num_units, is_training=training_phase)  # initialize our computational graph
 
 if continue_from_epoch == -1:  # if this is a new experiment and not continuation of a previous one then generate a new
     # statistics file
