@@ -30,4 +30,4 @@ export TMP=/disk/scratch/${STUDENT_ID}/
 
 source /home/${STUDENT_ID}/miniconda3/bin/activate mlp
 
-python twitter_starter.py --typec rnn --experiment_prefix 1a2a3a4c5a6a --seed 25012018 --cell gru --hidden_unit 32 --dropout_rate 0 --num_units 1024 --batch_size 128 --epochs 50
+python twitter_starter.py --typec rnn --experiment_prefix 1a2b3a4c5a6a --seed 25012018 --cell gru --hidden_unit 64 --dropout_rate 0 --num_units 1024 --batch_size 128 --epochs 50
