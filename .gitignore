@@ -5,6 +5,9 @@ data/glove*
 embeddings.bin
 Google*
 
+*.sublime-project
+*.sublime-workspace
+
 sample_experiment_errfile
 sample_experiment_outfile
 
